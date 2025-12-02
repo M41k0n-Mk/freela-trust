@@ -85,6 +85,7 @@ contract EscrowManager is Ownable, ReentrancyGuard, Pausable {
      * @param token Endereço do token (address(0) para ETH)
      * @param amounts Array com os valores de cada milestone
      * @param disputeFee Taxa para abrir disputa
+     * @return jobId O ID do job criado
      */
     function createJob(
         address worker,
@@ -92,19 +93,28 @@ contract EscrowManager is Ownable, ReentrancyGuard, Pausable {
         address token,
         uint256[] calldata amounts,
         uint256 disputeFee
-    ) external whenNotPaused returns (uint256) {
+    ) external whenNotPaused returns (uint256 jobId) {
         require(worker != address(0), "Invalid worker address");
         require(arbiter != address(0), "Invalid arbiter address");
         require(amounts.length > 0, "Must have at least one milestone");
+        require(amounts.length <= 10, "Maximum 10 milestones per job");
         require(disputeFee > 0, "Dispute fee must be greater than 0");
+        require(disputeFee <= 1 ether, "Dispute fee too high");
+
+        // Validar token ERC20 se não for ETH
+        if (token != address(0)) {
+            require(IERC20(token).totalSupply() > 0, "Invalid ERC20 token");
+        }
 
         uint256 totalAmount = 0;
         for (uint256 i = 0; i < amounts.length; i++) {
             require(amounts[i] > 0, "Milestone amount must be greater than 0");
+            require(amounts[i] <= 100 ether, "Milestone amount too high");
             totalAmount += amounts[i];
         }
+        require(totalAmount <= 1000 ether, "Total job amount too high");
 
-        uint256 jobId = jobCounter;
+        jobId = jobCounter;
         jobCounter++;
 
         Job storage job = jobs[jobId];
@@ -127,7 +137,6 @@ contract EscrowManager is Ownable, ReentrancyGuard, Pausable {
         }
 
         emit JobCreated(jobId, msg.sender, worker, arbiter, token, totalAmount);
-        return jobId;
     }
 
     /**
@@ -254,10 +263,14 @@ contract EscrowManager is Ownable, ReentrancyGuard, Pausable {
     {
         Job storage job = jobs[jobId];
         require(workerAmount + payerRefund <= job.escrowBalance, "Invalid distribution amounts");
+        require(workerAmount >= 0 && payerRefund >= 0, "Amounts cannot be negative");
+
+        uint256 totalDistributed = workerAmount + payerRefund;
+        uint256 remaining = job.escrowBalance - totalDistributed;
 
         // Effects
         job.state = JobState.Completed;
-        job.escrowBalance -= (workerAmount + payerRefund);
+        job.escrowBalance = remaining; // Remaining goes to arbiter as fee
 
         if (workerAmount > 0) {
             pendingWithdrawals[job.worker][job.token] += workerAmount;
@@ -265,6 +278,10 @@ contract EscrowManager is Ownable, ReentrancyGuard, Pausable {
 
         if (payerRefund > 0) {
             pendingWithdrawals[job.payer][job.token] += payerRefund;
+        }
+
+        if (remaining > 0) {
+            pendingWithdrawals[job.arbiter][job.token] += remaining;
         }
 
         emit DisputeResolved(jobId, workerAmount, payerRefund);
@@ -401,5 +418,21 @@ contract EscrowManager is Ownable, ReentrancyGuard, Pausable {
         require(milestoneIndex < jobs[jobId].milestones.length, "Invalid milestone index");
         Milestone storage milestone = jobs[jobId].milestones[milestoneIndex];
         return (milestone.amount, milestone.delivered, milestone.approved, milestone.cid);
+    }
+
+    /**
+     * @dev Retorna o saldo pendente de retirada para um usuário e token.
+     * @param user Endereço do usuário
+     * @param token Endereço do token
+     */
+    function getPendingWithdrawal(address user, address token) external view returns (uint256) {
+        return pendingWithdrawals[user][token];
+    }
+
+    /**
+     * @dev Retorna estatísticas gerais do contrato.
+     */
+    function getContractStats() external view returns (uint256 totalJobs) {
+        return jobCounter;
     }
 }
