@@ -32,3 +32,11 @@ coverage/
 # Build
 dist/
 build/
+
+# Hardhat specific
+deployments/
+.openzeppelin/
+
+# Temporary files
+*.tmp
+*.temp
