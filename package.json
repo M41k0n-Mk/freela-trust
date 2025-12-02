@@ -1,0 +1,21 @@
+{
+  "name": "freela-trust",
+  "version": "1.0.0",
+  "description": "Projeto para gerenciar contratos de freela com escrow em blockchain",
+  "main": "index.js",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "node": "npx hardhat node",
+    "test": "npx hardhat test",
+    "deploy-local": "npx hardhat run scripts/deploy.js --network localhost"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "hardhat": "^2.27.1"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.9.0",
+    "dotenv": "^16.3.1",
+    "ethers": "^6.8.1"
+  }
+}
